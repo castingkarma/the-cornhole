@@ -89,7 +89,7 @@ function banner(headline, sub) {
   const style = document.createElement("style");
   style.textContent = `
     .yay{position:fixed;inset:0;z-index:59;display:flex;align-items:center;justify-content:center;flex-direction:column;
-      text-align:center;padding:24px;background:radial-gradient(circle at 50% 45%,rgba(240,138,36,.35),rgba(15,20,24,.88) 65%);
+      text-align:center;padding:24px;background:radial-gradient(circle at 50% 45%,rgba(92,48,12,.94),rgba(10,13,16,.96) 70%);
       animation:yayIn .35s ease-out both;cursor:pointer}
     .yay.out{animation:yayOut .45s ease-in both}
     .yay .h{font-family:"Anton",Impact,sans-serif;text-transform:uppercase;color:#fbf3e4;line-height:.9;
