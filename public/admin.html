@@ -24,6 +24,21 @@
   dialog p{color:var(--muted);margin:0 0 18px}
   .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-weight:600;z-index:5}
   .toast.err{border-color:var(--red);color:var(--red)}
+  .newbie-bg{position:fixed;inset:0;z-index:40;background:rgba(8,11,14,.72);display:flex;align-items:center;justify-content:center;padding:18px;animation:nbFade .3s ease-out both}
+  .newbie{position:relative;background:var(--panel);border:1px solid rgba(242,193,78,.5);border-radius:18px;padding:28px 24px 22px;max-width:460px;width:100%;
+    max-height:calc(100vh - 36px);overflow:auto;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 60px rgba(240,138,36,.25);animation:nbPop .55s cubic-bezier(.2,1.5,.4,1) both}
+  .newbie .x{position:absolute;top:10px;right:12px;background:none;border:0;color:var(--muted);font-size:26px;line-height:1;cursor:pointer;padding:6px 10px;border-radius:8px}
+  .newbie .x:hover{color:var(--cream)}
+  .newbie .k{font-size:12px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold);font-weight:700}
+  .newbie h2{font-family:"Anton",Impact,sans-serif;font-weight:400;text-transform:uppercase;font-size:clamp(36px,9vw,54px);line-height:1;margin:8px 0 16px}
+  .newbie ul{list-style:none;margin:0 0 18px;padding:0;display:grid;gap:8px;text-align:left}
+  .newbie li{background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:10px 14px;animation:nbPop .5s cubic-bezier(.2,1.5,.4,1) both}
+  .newbie li .nm{font-weight:700}
+  .newbie li .nk{color:var(--gold);margin-left:6px}
+  .newbie li .tm{display:block;color:var(--faint);font-size:12px;margin-top:2px}
+  @keyframes nbFade{from{opacity:0}to{opacity:1}}
+  @keyframes nbPop{0%{opacity:0;transform:scale(.6)}100%{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.newbie-bg,.newbie,.newbie li{animation:none}}
 </style>
 </head>
 <body>
@@ -83,8 +98,38 @@
 
 <script type="module">
 import { el, renderBracket, renderStatus } from "/common.js";
+import { confetti } from "/celebrate.js";
 
 const PIN_KEY = "cornhole-admin-pin";
+const SEEN_KEY = "cornhole-admin-seen-ids"; // player ids Justin has already been shown, per device
+
+function seenIds() { try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || "[]")); } catch (e) { return new Set(); } }
+function markSeen(ids) { const s = seenIds(); ids.forEach((id) => s.add(id)); try { localStorage.setItem(SEEN_KEY, JSON.stringify([...s])); } catch (e) {} }
+
+// Pops up the players who signed up since Justin last looked, with confetti.
+function showNewPlayers() {
+  if (!data || document.querySelector(".newbie-bg")) return;
+  const seen = seenIds();
+  const fresh = data.players.filter((p) => !seen.has(p.id));
+  if (!fresh.length) return;
+  const close = () => { markSeen(fresh.map((p) => p.id)); bg.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  const n = fresh.length;
+  const box = el("div", { class: "newbie", role: "dialog", "aria-modal": "true", "aria-labelledby": "nbTitle" },
+    el("button", { class: "x", type: "button", "aria-label": "Close", onclick: close }, "×"),
+    el("div", { class: "k" }, n === 1 ? "New sign-up" : n + " new sign-ups"),
+    el("h2", { id: "nbTitle" }, n === 1 ? "Fresh meat! 🌽" : "The field grows! 🌽"),
+    el("ul", {}, fresh.map((p, i) => el("li", { style: "animation-delay:" + (0.25 + i * 0.08) + "s" },
+      el("span", { class: "nm" }, p.first + " " + p.last), p.nick ? el("span", { class: "nk" }, "“" + p.nick + "”") : null,
+      el("span", { class: "tm" }, "Signed up " + new Date(p.createdAt).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))))),
+    el("div", { style: "color:var(--muted);font-size:14px;margin-bottom:14px" }, data.players.length + " players in total"),
+    el("button", { class: "btn", type: "button", onclick: close }, "Let's go"));
+  const bg = el("div", { class: "newbie-bg", onclick: (e) => { if (e.target === bg) close(); } }, box);
+  document.body.append(bg);
+  document.addEventListener("keydown", onKey);
+  box.querySelector(".btn").focus();
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) confetti();
+}
 const $ = (id) => document.getElementById(id);
 let pin = "";
 let data = null;
@@ -120,6 +165,7 @@ async function call(action, extra = {}) {
   if (!j.ok) throw new Error(j.error || "Something went wrong.");
   data = j;
   render();
+  if (action === "list") showNewPlayers();
   return j;
 }
 
@@ -148,9 +194,11 @@ function render() {
   // bracket controls
   const bar = $("drawBar");
   if (!bracket) {
-    bar.replaceChildren(el("button", { class: "btn", type: "button", disabled: players.length < 2, onclick: draw }, "Draw the bracket"));
+    const locked = data.registrationOpen;
+    bar.replaceChildren(el("button", { class: "btn", type: "button", disabled: locked || players.length < 2, onclick: draw }, locked ? "🔒 Draw the bracket" : "Draw the bracket"));
     let size = 2; while (size < players.length) size *= 2;
-    $("drawHint").textContent = players.length < 2 ? "You need at least 2 players to draw."
+    $("drawHint").textContent = locked ? "Locked until registration closes Friday, Nov 20 at 11:59 PM Central. " + players.length + " signed up so far."
+      : players.length < 2 ? "You need at least 2 players to draw."
       : players.length + " players → " + size + "-slot bracket, " + (size - players.length) + " random first-round bye(s). Remove any no-shows first, because the player list locks once you draw.";
     $("status").replaceChildren(); $("bracket").replaceChildren(); $("pickHint").hidden = true;
   } else {
@@ -202,7 +250,9 @@ async function undo(matchId) {
 $("addForm").addEventListener("submit", (e) => {
   e.preventDefault();
   run(async () => {
-    await call("add", { first: $("aFirst").value, last: $("aLast").value, nick: $("aNick").value });
+    const before = new Set(data.players.map((p) => p.id));
+    const j = await call("add", { first: $("aFirst").value, last: $("aLast").value, nick: $("aNick").value });
+    markSeen(j.players.filter((p) => !before.has(p.id) && p.first.toLowerCase() === $("aFirst").value.trim().toLowerCase()).map((p) => p.id)); // he added them himself
     $("addForm").reset(); $("aFirst").focus();
   }, "Player added");
 });

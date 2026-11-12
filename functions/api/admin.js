@@ -1,7 +1,7 @@
 // POST /api/admin — Justin's controls. Every call carries the PIN in the
 // x-admin-pin header; ADMIN_PIN is a Cloudflare secret, never in the code.
 // 10 wrong PINs within 15 minutes locks the admin out for the rest of that window.
-import { json, getPlayers, getBracket, saveBracket, addPlayer, publicPlayer } from "../../lib/server.js";
+import { json, getPlayers, getBracket, saveBracket, addPlayer, publicPlayer, isOpen, DEADLINE } from "../../lib/server.js";
 import { buildBracket, setWinner, clearWinner } from "../../lib/bracket.js";
 
 const FAIL_WINDOW_MS = 15 * 60 * 1000;
@@ -40,6 +40,8 @@ async function fullState(db) {
   return {
     players: players.map((p) => ({ ...publicPlayer(p), first: p.first, last: p.last, createdAt: p.created_at })),
     bracket: await getBracket(db),
+    deadline: DEADLINE,
+    registrationOpen: isOpen(),
   };
 }
 
@@ -78,6 +80,7 @@ export async function onRequestPost({ request, env }) {
       }
 
       case "draw": {
+        if (isOpen()) return json({ ok: false, error: "The bracket unlocks once registration closes (11:59 PM Central, Nov 20)." }, 409);
         if (bracket && !body.redraw) return json({ ok: false, error: "Already drawn." }, 409);
         const ids = (await getPlayers(db)).map((p) => p.id);
         await saveBracket(db, buildBracket(ids, cryptoRand));

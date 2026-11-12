@@ -38,7 +38,7 @@
         <div class="unit"><div class="num" id="cdM">–</div><div class="lbl">Min</div></div>
         <div class="unit"><div class="num" id="cdS">–</div><div class="lbl">Sec</div></div>
       </div>
-      <div class="deadline">Registration closes <strong>Thursday, Nov 20 at 11:59 PM Central</strong></div>
+      <div class="deadline">Registration closes <strong>Friday, Nov 20 at 11:59 PM Central</strong></div>
       <a class="cta" href="#register" id="heroCta">Register now →</a>
     </div>
     <div id="closedBanner" class="deadline" hidden><strong>Registration is closed.</strong> Scroll down for the bracket.</div>
@@ -86,6 +86,7 @@
 
 <script type="module">
 import { el, renderBracket, renderStatus } from "/common.js";
+import { celebrate } from "/celebrate.js";
 
 const MY_ID_KEY = "cornhole-my-id";
 let state = null;
@@ -180,6 +181,7 @@ formNode.addEventListener("submit", async (ev) => {
     if (!j.ok) throw new Error(j.error || "Something went wrong. Try again.");
     if (j.player) { try { localStorage.setItem(MY_ID_KEY, String(j.player.id)); } catch (e) {} }
     const who = j.player ? (j.player.nick || j.player.name) : body.first;
+    celebrate(j.player && j.player.nick ? "“" + j.player.nick + "”" : who);
     $("regCard").replaceChildren(el("div", { class: "done" },
       el("div", { class: "big" }, "You're in, " + who + "!"),
       el("p", {}, "Your name is on the board below. The bracket drops after registration closes, so check back here."),
