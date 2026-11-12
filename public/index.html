@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Cornhole · Thanksgiving Day Tournament</title>
+<meta name="description" content="The Cornhole is back. Thanksgiving Day at Justin's. Sign up before midnight, Nov 20, and see who you're up against.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="The Cornhole · Thanksgiving Day Tournament">
+<meta property="og:description" content="Sign up before 11:59 PM, Nov 20. Bracket drops after registration closes.">
+<meta property="og:url" content="https://the-cornhole.pages.dev/">
+<meta property="og:image" content="https://the-cornhole.pages.dev/og.png">
+<meta name="twitter:image" content="https://the-cornhole.pages.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0f1418">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<a class="skip" href="#register">Skip to registration</a>
+<main class="wrap">
+
+  <header class="hero">
+    <div class="board" aria-hidden="true"><span class="bag"></span></div>
+    <div class="kicker">Thanksgiving Day · Justin's House</div>
+    <h1 class="display">The Cornhole</h1>
+    <p class="sub">One bracket. Two pits. <strong>One champion.</strong> Get your name in before the board closes.</p>
+
+    <div id="countdownBox">
+      <div class="countdown" role="timer" aria-live="off" aria-label="Time left to register">
+        <div class="unit"><div class="num" id="cdD">–</div><div class="lbl">Days</div></div>
+        <div class="unit"><div class="num" id="cdH">–</div><div class="lbl">Hours</div></div>
+        <div class="unit"><div class="num" id="cdM">–</div><div class="lbl">Min</div></div>
+        <div class="unit"><div class="num" id="cdS">–</div><div class="lbl">Sec</div></div>
+      </div>
+      <div class="deadline">Registration closes <strong>Thursday, Nov 20 at 11:59 PM Central</strong></div>
+      <a class="cta" href="#register" id="heroCta">Register now →</a>
+    </div>
+    <div id="closedBanner" class="deadline" hidden><strong>Registration is closed.</strong> Scroll down for the bracket.</div>
+  </header>
+
+  <section class="block" aria-labelledby="factsTitle">
+    <h2 id="factsTitle" class="display">The Rules</h2>
+    <div class="facts">
+      <div class="fact"><div class="k">When</div><div class="v">Thanksgiving Day, Thu Nov 26</div></div>
+      <div class="fact"><div class="k">Where</div><div class="v">Justin's house</div></div>
+      <div class="fact"><div class="k">Format</div><div class="v">Singles · single elimination</div></div>
+      <div class="fact"><div class="k">Games</div><div class="v">First to 21 · 2 pits at once</div></div>
+    </div>
+  </section>
+
+  <section class="block" id="register" aria-labelledby="regTitle">
+    <h2 id="regTitle" class="display">Register</h2>
+    <div class="card" id="regCard">
+      <form id="regForm" novalidate>
+        <div class="form">
+          <div><label for="first">First name</label><input type="text" id="first" name="first" autocomplete="given-name" maxlength="30" required></div>
+          <div><label for="last">Last name</label><input type="text" id="last" name="last" autocomplete="family-name" maxlength="30" required></div>
+          <div><label for="nick">Nickname <span style="color:var(--faint)">(optional)</span></label><input type="text" id="nick" name="nick" maxlength="30" placeholder="e.g. Bag Daddy" autocomplete="off"></div>
+          <div class="hp" aria-hidden="true"><label for="website">Website</label><input type="text" id="website" name="website" tabindex="-1" autocomplete="off"></div>
+          <button class="btn" type="submit" id="regBtn">I'm in</button>
+        </div>
+        <div class="msg" id="regMsg" role="status" aria-live="polite"></div>
+      </form>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="fieldTitle">
+    <h2 id="fieldTitle" class="display">Who's In <span class="count" id="count">0</span></h2>
+    <p class="lead">Updates live as people sign up.</p>
+    <div class="field" id="field"><span class="empty">Nobody yet. Be the first.</span></div>
+  </section>
+
+  <section class="block" id="bracketSection" aria-labelledby="bracketTitle">
+    <h2 id="bracketTitle" class="display">The Bracket</h2>
+    <div id="bracketBody" class="card"></div>
+  </section>
+
+</main>
+<footer>The Cornhole · Thanksgiving 2026 · Good luck out there 🦃</footer>
+
+<script type="module">
+import { el, renderBracket, renderStatus } from "/common.js";
+
+const MY_ID_KEY = "cornhole-my-id";
+let state = null;
+let seen = new Set();
+let firstLoad = true;
+
+const $ = (id) => document.getElementById(id);
+function myId() { try { return Number(localStorage.getItem(MY_ID_KEY)) || null; } catch (e) { return null; } }
+
+function tick() {
+  if (!state) return;
+  const left = Date.parse(state.deadline) - Date.now();
+  if (left <= 0 || !state.open) return;
+  const d = Math.floor(left / 864e5), h = Math.floor(left / 36e5) % 24, m = Math.floor(left / 6e4) % 60, s = Math.floor(left / 1e3) % 60;
+  $("cdD").textContent = d; $("cdH").textContent = String(h).padStart(2, "0");
+  $("cdM").textContent = String(m).padStart(2, "0"); $("cdS").textContent = String(s).padStart(2, "0");
+}
+
+function renderField() {
+  const box = $("field");
+  $("count").textContent = state.count;
+  if (!state.players.length) { box.replaceChildren(el("span", { class: "empty" }, "Nobody yet. Be the first.")); return; }
+  const mine = myId();
+  box.replaceChildren(...state.players.map((p) => el("span", {
+    class: "chip" + (p.id === mine ? " me" : "") + (!firstLoad && !seen.has(p.id) ? " new" : ""),
+  }, p.name, p.nick ? el("span", { class: "nick" }, "“" + p.nick + "”") : null)));
+  state.players.forEach((p) => seen.add(p.id));
+}
+
+function renderBracketSection() {
+  const body = $("bracketBody");
+  const b = state.bracket;
+  if (!b) {
+    const n = state.count;
+    let note = "Registration is still open.";
+    if (!state.open) note = "Registration is closed. Justin will draw the bracket soon.";
+    body.replaceChildren(el("div", { class: "predraw" },
+      el("div", { class: "big" }, "Bracket drops after registration closes"),
+      el("div", {}, note),
+      n >= 2 ? el("div", { style: "margin-top:8px" }, n + " players so far" + byeNote(n)) : null));
+    return;
+  }
+  body.replaceChildren(...renderStatus(b, state.players), renderBracket(b, state.players));
+}
+
+function byeNote(n) {
+  let size = 2; while (size < n) size *= 2;
+  const byes = size - n;
+  return byes ? " · " + byes + " random first-round bye" + (byes > 1 ? "s" : "") + " at this count" : " · a perfect bracket, no byes";
+}
+
+function renderRegistration() {
+  const open = state.open;
+  $("countdownBox").hidden = !open;
+  $("closedBanner").hidden = open;
+  if (!open && !$("regCard").dataset.closed && !$("regCard").dataset.done) {
+    $("regCard").dataset.closed = "1";
+    $("regCard").replaceChildren(el("div", { class: "closed" }, state.bracket ? "Registration is closed — the bracket is set below." : "Registration is closed."));
+  }
+}
+
+async function load() {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    if (!r.ok) throw new Error();
+    state = await r.json();
+    renderRegistration(); renderField(); renderBracketSection(); tick();
+    firstLoad = false;
+  } catch (e) { /* keep showing the last good state; try again next poll */ }
+}
+
+const formNode = $("regForm");
+function signUpAnother() {
+  formNode.reset();
+  $("regMsg").className = "msg"; $("regMsg").textContent = "";
+  $("regBtn").disabled = false; $("regBtn").textContent = "I'm in";
+  delete $("regCard").dataset.done;
+  $("regCard").replaceChildren(formNode);
+  $("first").focus();
+}
+
+formNode.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const msg = $("regMsg"), btn = $("regBtn");
+  const body = { first: $("first").value, last: $("last").value, nick: $("nick").value, website: $("website").value };
+  msg.className = "msg"; msg.textContent = "";
+  if (!body.first.trim() || !body.last.trim()) { msg.className = "msg err"; msg.textContent = "First and last name, please."; ($("first").value.trim() ? $("last") : $("first")).focus(); return; }
+  btn.disabled = true; btn.textContent = "Signing you up…";
+  try {
+    const r = await fetch("/api/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!j.ok) throw new Error(j.error || "Something went wrong. Try again.");
+    if (j.player) { try { localStorage.setItem(MY_ID_KEY, String(j.player.id)); } catch (e) {} }
+    const who = j.player ? (j.player.nick || j.player.name) : body.first;
+    $("regCard").replaceChildren(el("div", { class: "done" },
+      el("div", { class: "big" }, "You're in, " + who + "!"),
+      el("p", {}, "Your name is on the board below. The bracket drops after registration closes, so check back here."),
+      el("div", { style: "display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:6px" },
+        el("a", { class: "btn ghost", href: "#fieldTitle", style: "text-decoration:none" }, "See who's in ↓"),
+        el("button", { class: "btn ghost", type: "button", onclick: signUpAnother }, "Sign up someone else"))));
+    $("regCard").dataset.done = "1";
+    load();
+  } catch (e) {
+    msg.className = "msg err"; msg.textContent = e.message;
+    btn.disabled = false; btn.textContent = "I'm in";
+  }
+});
+
+load();
+setInterval(tick, 1000);
+setInterval(() => { if (document.visibilityState === "visible") load(); }, 10000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") load(); });
+</script>
+</body>
+</html>

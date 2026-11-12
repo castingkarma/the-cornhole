@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>The Cornhole · Admin</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .plist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+  .plist li{display:flex;align-items:center;gap:10px;background:var(--bg-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .plist .who{flex:1}
+  .plist .when{color:var(--faint);font-size:12px}
+  .plist .x{background:none;border:1px solid var(--line);color:var(--red);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:13px}
+  .hint{color:var(--muted);font-size:14px;margin:8px 0 0}
+  dialog{background:var(--panel);color:var(--cream);border:1px solid var(--line);border-radius:14px;padding:22px;max-width:420px;width:calc(100% - 32px)}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  dialog h3{margin:0 0 8px;font-size:20px}
+  dialog p{color:var(--muted);margin:0 0 18px}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-weight:600;z-index:5}
+  .toast.err{border-color:var(--red);color:var(--red)}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="hero" style="padding-bottom:10px">
+    <div class="kicker">Justin's controls</div>
+    <h1 class="display" style="font-size:clamp(44px,10vw,84px)">The Cornhole</h1>
+    <p class="sub"><a href="/" target="_blank" rel="noopener">Open the public page ↗</a></p>
+  </header>
+
+  <section class="block" id="login">
+    <div class="card" style="max-width:420px;margin:0 auto">
+      <form id="pinForm">
+        <label for="pin">Admin PIN</label>
+        <div class="bar"><input type="password" id="pin" autocomplete="current-password" style="flex:1"><button class="btn" type="submit">Unlock</button></div>
+        <div class="msg err" id="pinMsg" role="alert"></div>
+      </form>
+    </div>
+  </section>
+
+  <div id="app" hidden>
+    <section class="block">
+      <h2 class="display">Bracket</h2>
+      <div class="card">
+        <div class="bar" id="drawBar"></div>
+        <p class="hint" id="drawHint"></p>
+        <div id="status" style="margin-top:16px"></div>
+        <div id="bracket"></div>
+        <p class="hint" id="pickHint" hidden>Tap a player's name to make them the winner. Their next game fills in automatically, and the next waiting game moves onto the free pit. Tap "Undo" if you pick the wrong one.</p>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2 class="display">Players <span class="count" id="count">0</span></h2>
+      <div class="card">
+        <form id="addForm" class="form" style="margin-bottom:16px">
+          <div><label for="aFirst">First name</label><input type="text" id="aFirst" maxlength="30"></div>
+          <div><label for="aLast">Last name</label><input type="text" id="aLast" maxlength="30"></div>
+          <div><label for="aNick">Nickname</label><input type="text" id="aNick" maxlength="30"></div>
+          <button class="btn" type="submit">Add player</button>
+        </form>
+        <p class="hint" id="addHint">Add walk-ins or late sign-ups here. This works even after the deadline, as long as the bracket hasn't been drawn.</p>
+        <ul class="plist" id="plist" style="margin-top:14px"></ul>
+      </div>
+    </section>
+  </div>
+</main>
+
+<dialog id="confirm">
+  <h3 id="cTitle"></h3>
+  <p id="cBody"></p>
+  <div class="bar" style="justify-content:flex-end">
+    <button class="btn ghost" type="button" id="cNo">Cancel</button>
+    <button class="btn" type="button" id="cYes">Confirm</button>
+  </div>
+</dialog>
+
+<script type="module">
+import { el, renderBracket, renderStatus } from "/common.js";
+
+const PIN_KEY = "cornhole-admin-pin";
+const $ = (id) => document.getElementById(id);
+let pin = "";
+let data = null;
+
+try { pin = sessionStorage.getItem(PIN_KEY) || ""; } catch (e) {}
+
+function toast(text, isErr) {
+  const t = el("div", { class: "toast" + (isErr ? " err" : ""), role: "status" }, text);
+  document.body.append(t);
+  setTimeout(() => t.remove(), 3200);
+}
+
+function ask(title, body, yesLabel = "Confirm") {
+  return new Promise((resolve) => {
+    const d = $("confirm");
+    $("cTitle").textContent = title; $("cBody").textContent = body; $("cYes").textContent = yesLabel;
+    const done = (v) => { d.close(); $("cYes").onclick = $("cNo").onclick = null; resolve(v); };
+    $("cYes").onclick = () => done(true);
+    $("cNo").onclick = () => done(false);
+    d.oncancel = (e) => { e.preventDefault(); done(false); };
+    d.showModal();
+  });
+}
+
+async function call(action, extra = {}) {
+  const r = await fetch("/api/admin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-admin-pin": pin },
+    body: JSON.stringify({ action, ...extra }),
+  });
+  const j = await r.json().catch(() => ({ ok: false, error: "Something went wrong." }));
+  if (r.status === 401 || r.status === 429) { lock(j.error); throw new Error(j.error); }
+  if (!j.ok) throw new Error(j.error || "Something went wrong.");
+  data = j;
+  render();
+  return j;
+}
+
+function lock(message) {
+  pin = "";
+  try { sessionStorage.removeItem(PIN_KEY); } catch (e) {}
+  $("app").hidden = true; $("login").hidden = false;
+  $("pinMsg").textContent = message || "";
+}
+
+function render() {
+  const { players, bracket } = data;
+  $("count").textContent = players.length;
+
+  // players
+  $("plist").replaceChildren(...(players.length ? players.map((p) => el("li", {},
+    el("span", { class: "who" }, p.first + " " + p.last, p.nick ? el("span", { style: "color:var(--gold);margin-left:6px" }, "“" + p.nick + "”") : null),
+    el("span", { class: "when" }, new Date(p.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })),
+    bracket ? null : el("button", { class: "x", type: "button", onclick: () => removePlayer(p) }, "Remove")
+  )) : [el("li", {}, el("span", { class: "who", style: "color:var(--faint)" }, "No players yet."))]));
+  $("addForm").hidden = !!bracket;
+  $("addHint").textContent = bracket
+    ? "The bracket is drawn, so the player list is locked. To add or remove someone, reset the bracket first, then draw again."
+    : "Add walk-ins or late sign-ups here. This works even after the deadline, as long as the bracket hasn't been drawn.";
+
+  // bracket controls
+  const bar = $("drawBar");
+  if (!bracket) {
+    bar.replaceChildren(el("button", { class: "btn", type: "button", disabled: players.length < 2, onclick: draw }, "Draw the bracket"));
+    let size = 2; while (size < players.length) size *= 2;
+    $("drawHint").textContent = players.length < 2 ? "You need at least 2 players to draw."
+      : players.length + " players → " + size + "-slot bracket, " + (size - players.length) + " random first-round bye(s). Remove any no-shows first, because the player list locks once you draw.";
+    $("status").replaceChildren(); $("bracket").replaceChildren(); $("pickHint").hidden = true;
+  } else {
+    const started = bracket.rounds.flat().some((m) => !m.bye && m.winner != null);
+    bar.replaceChildren(...[
+      started ? null : el("button", { class: "btn ghost", type: "button", onclick: redraw }, "Re-draw"),
+      el("button", { class: "btn danger", type: "button", onclick: resetBracket }, "Reset bracket")].filter(Boolean));
+    $("drawHint").textContent = started ? "Games are underway. Reset wipes every result." : "Not happy with the draw? Re-draw before the first game is scored.";
+    $("status").replaceChildren(...renderStatus(bracket, players));
+    $("bracket").replaceChildren(renderBracket(bracket, players, { admin: true, onPick: pick, onUndo: undo }));
+    $("pickHint").hidden = bracket.champion != null;
+  }
+}
+
+function label(id) {
+  const p = data.players.find((x) => x.id === id);
+  return p ? p.name + (p.nick ? " “" + p.nick + "”" : "") : "?";
+}
+
+async function run(fn, okText) {
+  try { await fn(); if (okText) toast(okText); } catch (e) { if (e.message) toast(e.message, true); }
+}
+
+async function draw() {
+  if (!(await ask("Draw the bracket?", "This pairs everyone at random and closes registration. The player list locks until you reset.", "Draw it"))) return;
+  run(() => call("draw"), "Bracket drawn 🎯");
+}
+async function redraw() {
+  if (!(await ask("Re-draw?", "Throws out this draw and pairs everyone again at random.", "Re-draw"))) return;
+  run(() => call("draw", { redraw: true }), "Re-drawn");
+}
+async function resetBracket() {
+  if (!(await ask("Reset the bracket?", "Deletes the bracket and every result. Players stay signed up. If the deadline hasn't passed yet, registration reopens.", "Reset"))) return;
+  run(() => call("reset"), "Bracket reset");
+}
+async function removePlayer(p) {
+  if (!(await ask("Remove " + p.first + " " + p.last + "?", "They come off the list. They can sign up again if registration is still open.", "Remove"))) return;
+  run(() => call("remove", { id: p.id }), "Removed");
+}
+async function pick(matchId, playerId) {
+  if (!(await ask(label(playerId) + " wins?", "They move on to their next game.", "Yes, they won"))) return;
+  run(() => call("result", { match: matchId, winner: playerId }), label(playerId) + " advances");
+}
+async function undo(matchId) {
+  if (!(await ask("Undo this result?", "Also clears any later games that depended on it.", "Undo"))) return;
+  run(() => call("undo", { match: matchId }), "Result undone");
+}
+
+$("addForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  run(async () => {
+    await call("add", { first: $("aFirst").value, last: $("aLast").value, nick: $("aNick").value });
+    $("addForm").reset(); $("aFirst").focus();
+  }, "Player added");
+});
+
+$("pinForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  pin = $("pin").value.trim();
+  $("pinMsg").textContent = "";
+  try {
+    await call("list");
+    try { sessionStorage.setItem(PIN_KEY, pin); } catch (e2) {}
+    $("pin").value = "";
+    $("login").hidden = true; $("app").hidden = false;
+  } catch (err) { $("pinMsg").textContent = err.message; }
+});
+
+if (pin) {
+  call("list").then(() => { $("login").hidden = true; $("app").hidden = false; }).catch(() => {});
+}
+setInterval(() => { if (pin && !$("app").hidden && document.visibilityState === "visible" && !$("confirm").open) call("list").catch(() => {}); }, 15000);
+</script>
+</body>
+</html>
